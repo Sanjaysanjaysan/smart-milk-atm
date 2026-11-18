@@ -1,0 +1,682 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated customer, staff, or administrator profile with role metadata and sustainability totals.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Authentication UID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "description": "User email address (PII - owner and admin read only)."
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Display or legal full name."
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Optional contact phone number."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["customer", "staff", "admin"],
+          "description": "Authoritative RBAC role."
+        },
+        "bottlesSaved": {
+          "type": "integer",
+          "description": "Cumulative single-use plastic pouches prevented."
+        },
+        "totalMilkPurchasedMl": {
+          "type": "integer",
+          "description": "Cumulative milk purchased in milliliters."
+        },
+        "staffId": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Assigned dairy technician employee code."
+        },
+        "assignedMachineId": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Assigned Smart Milk ATM kiosk machine ID."
+        },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"],
+          "description": "Admin approval state for staff accounts."
+        },
+        "approvedBy": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "UID of approving administrator."
+        },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "authProvider": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Firebase auth provider identifier (e.g. google.com, password)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": ["uid", "email", "fullName", "role", "bottlesSaved", "totalMilkPurchasedMl", "createdAt", "updatedAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Server/Console-provisioned admin membership marker keyed by Firebase UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer milk vending order with strict separation between simulated demo payments and verified Razorpay payments.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "customerEmail": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "machineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "quantityMl": {
+          "type": "integer"
+        },
+        "amountPaise": {
+          "type": "integer"
+        },
+        "amountInr": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 8
+        },
+        "razorpayOrderId": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "razorpayPaymentId": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "upiId": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["PENDING", "PAID", "FAILED", "REFUNDED"]
+        },
+        "dispensingStatus": {
+          "type": "string",
+          "enum": ["WAITING_PAYMENT", "PENDING_DISPENSE", "DISPENSING", "COMPLETED", "FAILED"]
+        },
+        "dispensingToken": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "dispensedMl": {
+          "type": "integer"
+        },
+        "failureReason": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "gatewayMode": {
+          "type": "string",
+          "enum": ["DEMO_SIMULATION", "RAZORPAY_TEST", "RAZORPAY_LIVE"]
+        },
+        "isSimulatedPayment": {
+          "type": "boolean"
+        },
+        "paymentVerificationType": {
+          "type": "string",
+          "enum": ["DEMO_SIMULATED", "RAZORPAY_TEST_VERIFIED", "RAZORPAY_LIVE_VERIFIED", "NONE"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "orderId",
+        "customerId",
+        "customerName",
+        "customerEmail",
+        "machineId",
+        "quantityMl",
+        "amountPaise",
+        "amountInr",
+        "currency",
+        "paymentStatus",
+        "dispensingStatus",
+        "gatewayMode",
+        "isSimulatedPayment",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Machine": {
+      "title": "Machine",
+      "description": "Smart Milk ATM kiosk hardware configuration, location coordinates, stock summary, and telemetry.",
+      "type": "object",
+      "properties": {
+        "machineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "location": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 300
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "locationUpdatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ONLINE", "OFFLINE", "BUSY", "READY", "DISPENSING", "ERROR", "EMERGENCY_STOP"]
+        },
+        "tankCapacityLiters": {
+          "type": "number"
+        },
+        "currentStockLiters": {
+          "type": "number"
+        },
+        "temperatureCelsius": {
+          "type": "number"
+        },
+        "temperatureSensorConnected": {
+          "type": "boolean"
+        },
+        "minStockThresholdLiters": {
+          "type": "number"
+        },
+        "lastHeartbeat": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "relayActiveLow": {
+          "type": "boolean"
+        },
+        "relayPin": {
+          "type": "integer"
+        },
+        "flowSensorPin": {
+          "type": "integer"
+        },
+        "pulsesPerMl": {
+          "type": "number"
+        },
+        "maxRuntimeMs": {
+          "type": "integer"
+        },
+        "firmwareVersion": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": ["machineId", "name", "location", "status", "tankCapacityLiters", "currentStockLiters", "minStockThresholdLiters", "updatedAt"]
+    },
+    "MilkBatch": {
+      "title": "MilkBatch",
+      "description": "FEFO (First Expired, First Out) chilled milk storage batch.",
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "batchNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "machineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "supplierName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "receivedLitres": {
+          "type": "number"
+        },
+        "remainingLitres": {
+          "type": "number"
+        },
+        "expiryDate": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "storageTemperatureCelsius": {
+          "type": "number"
+        },
+        "receivedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "receivedByStaffUid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "receivedByStaffId": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "receivedByStaffName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "EXHAUSTED", "EXPIRED", "QUARANTINED"]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "batchId",
+        "batchNumber",
+        "machineId",
+        "supplierName",
+        "receivedLitres",
+        "remainingLitres",
+        "expiryDate",
+        "receivedAt",
+        "receivedByStaffUid",
+        "receivedByStaffId",
+        "receivedByStaffName",
+        "status"
+      ]
+    },
+    "StockRefill": {
+      "title": "StockRefill",
+      "description": "Immutable milk refill intake record created by verified staff or admin.",
+      "type": "object",
+      "properties": {
+        "refillId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "machineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "batchNumber": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "supplierName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "quantityLitres": {
+          "type": "number"
+        },
+        "expiryDate": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "temperatureCelsius": {
+          "type": "number"
+        },
+        "staffUid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffId": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "staffName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "refillTimestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "immutable": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "required": [
+        "refillId",
+        "machineId",
+        "batchNumber",
+        "supplierName",
+        "quantityLitres",
+        "expiryDate",
+        "staffUid",
+        "staffId",
+        "staffName",
+        "refillTimestamp",
+        "immutable"
+      ]
+    },
+    "StockTransaction": {
+      "title": "StockTransaction",
+      "description": "Immutable stock movement audit entry for refills and dispenses.",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "machineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["REFILL", "DISPENSE", "PARTIAL_DISPENSE", "EXPIRED_SPOILED", "ADJUSTMENT"]
+        },
+        "litres": {
+          "type": "number"
+        },
+        "batchId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "batchNumber": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "orderId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "balanceAfterLitres": {
+          "type": "number"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "performedByUid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "performedBy": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "required": ["transactionId", "machineId", "type", "litres", "balanceAfterLitres", "timestamp", "performedByUid", "performedBy"]
+    },
+    "StaffRequest": {
+      "title": "StaffRequest",
+      "description": "Staff technician onboarding application awaiting administrator approval.",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "applicantUid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "staffId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "assignedMachineId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REJECTED"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": ["requestId", "applicantUid", "fullName", "email", "staffId", "assignedMachineId", "status", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Append-only operational audit trail for admin and staff actions.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "event": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "actorUid": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "detailsSummary": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": ["id", "timestamp", "event", "actorUid", "detailsSummary"]
+    },
+    "ConnectionCheck": {
+      "title": "ConnectionCheck",
+      "description": "Read-only connection verification sentinel document.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": ["ok"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles partitioned by role (customer, staff, admin). Strict owner/admin PII isolation."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Admin role membership lookup documents."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer milk purchase orders synced from backend verification."
+    },
+    "/machines/{machineId}": {
+      "schema": { "$ref": "#/entities/Machine" },
+      "description": "Kiosk location, stock totals, and ESP32 calibration state."
+    },
+    "/milk_batches/{batchId}": {
+      "schema": { "$ref": "#/entities/MilkBatch" },
+      "description": "FEFO batch records for kiosk milk storage."
+    },
+    "/stock_refills/{refillId}": {
+      "schema": { "$ref": "#/entities/StockRefill" },
+      "description": "Immutable milk refill intake audit logs."
+    },
+    "/stock_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/StockTransaction" },
+      "description": "Immutable stock movement audit ledger."
+    },
+    "/staff_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/StaffRequest" },
+      "description": "Staff technician onboarding applications awaiting administrator approval."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Append-only operational audit logs."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionCheck" },
+      "description": "Startup Firestore connectivity probe document."
+    }
+  }
+}

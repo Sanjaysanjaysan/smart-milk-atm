@@ -1,0 +1,6 @@
+{
+  "name": "Smart Milk ATM — Automated IoT Milk Dispenser",
+  "description": "IoT-based automated milk vending system with UPI payments, ESP32 microcontroller pump control, real-time dispensing telemetry, and zero single-use plastic waste.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

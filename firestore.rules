@@ -1,0 +1,508 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -----------------------------------------------------------------
+    // Global Default-Deny Safety Net
+    // -----------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // Reusable Hardened Helper Primitives
+    // -----------------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 2 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'sanjayss9807@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isApprovedStaff() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approvalStatus == 'APPROVED';
+    }
+
+    function isStaffOrAdmin() {
+      return isAdmin() || isApprovedStaff();
+    }
+
+    // -----------------------------------------------------------------
+    // Validation Blueprints (Anti-Update-Gap Helpers)
+    // -----------------------------------------------------------------
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'fullName', 'role', 'bottlesSaved', 'totalMilkPurchasedMl', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'email', 'fullName', 'phone', 'role',
+          'bottlesSaved', 'totalMilkPurchasedMl',
+          'staffId', 'assignedMachineId', 'approvalStatus', 'approvedBy', 'approvedAt',
+          'authProvider', 'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 120
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 32))
+        && data.role in ['customer', 'staff', 'admin']
+        && data.bottlesSaved is int && data.bottlesSaved >= 0 && data.bottlesSaved <= 1000000
+        && data.totalMilkPurchasedMl is int && data.totalMilkPurchasedMl >= 0 && data.totalMilkPurchasedMl <= 100000000
+        && (!('staffId' in data) || (data.staffId is string && data.staffId.size() <= 40))
+        && (!('assignedMachineId' in data) || (data.assignedMachineId is string && isValidId(data.assignedMachineId)))
+        && (!('approvalStatus' in data) || data.approvalStatus in ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'])
+        && (!('approvedBy' in data) || (data.approvedBy is string && data.approvedBy.size() <= 128))
+        && (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 64))
+        && (!('authProvider' in data) || (data.authProvider is string && data.authProvider.size() <= 40))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data, orderId) {
+      return data.keys().hasAll([
+          'orderId', 'customerId', 'customerName', 'customerEmail', 'machineId',
+          'quantityMl', 'amountPaise', 'amountInr', 'currency',
+          'paymentStatus', 'dispensingStatus', 'gatewayMode', 'isSimulatedPayment',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'orderId', 'customerId', 'customerName', 'customerEmail', 'machineId',
+          'quantityMl', 'amountPaise', 'amountInr', 'currency',
+          'razorpayOrderId', 'razorpayPaymentId', 'upiId',
+          'paymentStatus', 'dispensingStatus', 'dispensingToken', 'dispensedMl',
+          'failureReason', 'gatewayMode', 'isSimulatedPayment', 'paymentVerificationType',
+          'createdAt', 'updatedAt'
+        ])
+        && data.orderId is string && data.orderId == orderId && isValidId(data.orderId)
+        && data.customerId is string && isValidId(data.customerId)
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 120
+        && data.customerEmail is string && data.customerEmail.size() >= 3 && data.customerEmail.size() <= 254
+        && data.machineId is string && isValidId(data.machineId)
+        && data.quantityMl is int && data.quantityMl >= 50 && data.quantityMl <= 10000
+        && data.amountPaise is int && data.amountPaise >= 0 && data.amountPaise <= 10000000
+        && (data.amountInr is int || data.amountInr is float) && data.amountInr >= 0
+        && data.currency is string && data.currency == 'INR'
+        && (!('razorpayOrderId' in data) || (data.razorpayOrderId is string && data.razorpayOrderId.size() <= 80))
+        && (!('razorpayPaymentId' in data) || (data.razorpayPaymentId is string && data.razorpayPaymentId.size() <= 80))
+        && (!('upiId' in data) || (data.upiId is string && data.upiId.size() <= 100))
+        && data.paymentStatus in ['PENDING', 'PAID', 'FAILED', 'REFUNDED']
+        && data.dispensingStatus in ['WAITING_PAYMENT', 'PENDING_DISPENSE', 'DISPENSING', 'COMPLETED', 'FAILED']
+        && (!('dispensingToken' in data) || (data.dispensingToken is string && data.dispensingToken.size() <= 120))
+        && (!('dispensedMl' in data) || (data.dispensedMl is int && data.dispensedMl >= 0 && data.dispensedMl <= 10000))
+        && (!('failureReason' in data) || (data.failureReason is string && data.failureReason.size() <= 300))
+        && data.gatewayMode in ['DEMO_SIMULATION', 'RAZORPAY_TEST', 'RAZORPAY_LIVE']
+        && data.isSimulatedPayment is bool
+        && (data.gatewayMode != 'DEMO_SIMULATION' || data.isSimulatedPayment == true)
+        && (!('paymentVerificationType' in data) || data.paymentVerificationType in ['DEMO_SIMULATED', 'RAZORPAY_TEST_VERIFIED', 'RAZORPAY_LIVE_VERIFIED', 'NONE'])
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMachine(data, machineId) {
+      return data.keys().hasAll(['machineId', 'name', 'location', 'status', 'tankCapacityLiters', 'currentStockLiters', 'minStockThresholdLiters', 'updatedAt'])
+        && data.keys().hasOnly([
+          'machineId', 'name', 'location', 'latitude', 'longitude', 'locationUpdatedAt',
+          'status', 'currentJobId', 'tankCapacityLiters', 'currentStockLiters',
+          'temperatureCelsius', 'temperatureSensorConnected', 'minStockThresholdLiters',
+          'lastHeartbeat', 'relayActiveLow', 'relayPin', 'flowSensorPin',
+          'pulsesPerMl', 'maxRuntimeMs', 'firmwareVersion', 'ipAddress', 'updatedAt'
+        ])
+        && data.machineId is string && data.machineId == machineId && isValidId(data.machineId)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 140
+        && data.location is string && data.location.size() >= 2 && data.location.size() <= 300
+        && (!('latitude' in data) || data.latitude == null || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90))
+        && (!('longitude' in data) || data.longitude == null || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180))
+        && (!('locationUpdatedAt' in data) || (data.locationUpdatedAt is string && data.locationUpdatedAt.size() <= 64))
+        && data.status in ['ONLINE', 'OFFLINE', 'BUSY', 'READY', 'DISPENSING', 'ERROR', 'EMERGENCY_STOP']
+        && (!('currentJobId' in data) || data.currentJobId == null || (data.currentJobId is string && data.currentJobId.size() <= 80))
+        && data.tankCapacityLiters is number && data.tankCapacityLiters > 0 && data.tankCapacityLiters <= 5000
+        && data.currentStockLiters is number && data.currentStockLiters >= 0 && data.currentStockLiters <= 5000
+        && (!('temperatureCelsius' in data) || data.temperatureCelsius == null || (data.temperatureCelsius is number && data.temperatureCelsius >= -20 && data.temperatureCelsius <= 60))
+        && (!('temperatureSensorConnected' in data) || data.temperatureSensorConnected is bool)
+        && data.minStockThresholdLiters is number && data.minStockThresholdLiters >= 0 && data.minStockThresholdLiters <= 500
+        && (!('lastHeartbeat' in data) || (data.lastHeartbeat is string && data.lastHeartbeat.size() <= 64))
+        && (!('relayActiveLow' in data) || data.relayActiveLow is bool)
+        && (!('relayPin' in data) || data.relayPin is int)
+        && (!('flowSensorPin' in data) || data.flowSensorPin is int)
+        && (!('pulsesPerMl' in data) || data.pulsesPerMl is number)
+        && (!('maxRuntimeMs' in data) || data.maxRuntimeMs is int)
+        && (!('firmwareVersion' in data) || (data.firmwareVersion is string && data.firmwareVersion.size() <= 64))
+        && (!('ipAddress' in data) || (data.ipAddress is string && data.ipAddress.size() <= 64))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMilkBatch(data, batchId) {
+      return data.keys().hasAll([
+          'batchId', 'batchNumber', 'machineId', 'supplierName',
+          'receivedLitres', 'remainingLitres', 'expiryDate',
+          'receivedAt', 'receivedByStaffUid', 'receivedByStaffId', 'receivedByStaffName', 'status'
+        ])
+        && data.keys().hasOnly([
+          'batchId', 'batchNumber', 'machineId', 'supplierName',
+          'receivedLitres', 'remainingLitres', 'expiryDate', 'storageTemperatureCelsius',
+          'receivedAt', 'receivedByStaffUid', 'receivedByStaffId', 'receivedByStaffName',
+          'status', 'notes'
+        ])
+        && data.batchId is string && data.batchId == batchId && isValidId(data.batchId)
+        && data.batchNumber is string && data.batchNumber.size() >= 2 && data.batchNumber.size() <= 64
+        && data.machineId is string && isValidId(data.machineId)
+        && data.supplierName is string && data.supplierName.size() >= 2 && data.supplierName.size() <= 140
+        && data.receivedLitres is number && data.receivedLitres > 0 && data.receivedLitres <= 5000
+        && data.remainingLitres is number && data.remainingLitres >= 0 && data.remainingLitres <= data.receivedLitres
+        && data.expiryDate is string && data.expiryDate.size() >= 8 && data.expiryDate.size() <= 24
+        && (!('storageTemperatureCelsius' in data) || data.storageTemperatureCelsius == null || data.storageTemperatureCelsius is number)
+        && data.receivedAt is timestamp
+        && data.receivedByStaffUid is string && data.receivedByStaffUid == request.auth.uid && isValidId(data.receivedByStaffUid)
+        && data.receivedByStaffId is string && data.receivedByStaffId.size() <= 40
+        && data.receivedByStaffName is string && data.receivedByStaffName.size() <= 120
+        && data.status in ['ACTIVE', 'EXHAUSTED', 'EXPIRED', 'QUARANTINED']
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300));
+    }
+
+    function isValidStockRefill(data, refillId) {
+      return data.keys().hasAll([
+          'refillId', 'machineId', 'batchNumber', 'supplierName',
+          'quantityLitres', 'expiryDate', 'staffUid', 'staffId', 'staffName',
+          'refillTimestamp', 'immutable'
+        ])
+        && data.keys().hasOnly([
+          'refillId', 'machineId', 'batchNumber', 'supplierName',
+          'quantityLitres', 'expiryDate', 'temperatureCelsius',
+          'staffUid', 'staffId', 'staffName', 'refillTimestamp', 'immutable', 'notes'
+        ])
+        && data.refillId is string && data.refillId == refillId && isValidId(data.refillId)
+        && data.machineId is string && isValidId(data.machineId)
+        && data.batchNumber is string && data.batchNumber.size() >= 2 && data.batchNumber.size() <= 64
+        && data.supplierName is string && data.supplierName.size() >= 2 && data.supplierName.size() <= 140
+        && data.quantityLitres is number && data.quantityLitres > 0 && data.quantityLitres <= 5000
+        && data.expiryDate is string && data.expiryDate.size() >= 8 && data.expiryDate.size() <= 24
+        && (!('temperatureCelsius' in data) || data.temperatureCelsius == null || data.temperatureCelsius is number)
+        && data.staffUid is string && data.staffUid == request.auth.uid && isValidId(data.staffUid)
+        && data.staffId is string && data.staffId.size() <= 40
+        && data.staffName is string && data.staffName.size() <= 120
+        && data.refillTimestamp is timestamp
+        && data.immutable == true
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300));
+    }
+
+    function isValidStockTransaction(data, transactionId) {
+      return data.keys().hasAll([
+          'transactionId', 'machineId', 'type', 'litres', 'balanceAfterLitres',
+          'timestamp', 'performedByUid', 'performedBy'
+        ])
+        && data.keys().hasOnly([
+          'transactionId', 'machineId', 'type', 'litres', 'batchId', 'batchNumber',
+          'orderId', 'balanceAfterLitres', 'timestamp', 'performedByUid', 'performedBy', 'notes'
+        ])
+        && data.transactionId is string && data.transactionId == transactionId && isValidId(data.transactionId)
+        && data.machineId is string && isValidId(data.machineId)
+        && data.type in ['REFILL', 'DISPENSE', 'PARTIAL_DISPENSE', 'EXPIRED_SPOILED', 'ADJUSTMENT']
+        && data.litres is number
+        && (!('batchId' in data) || (data.batchId is string && data.batchId.size() <= 64))
+        && (!('batchNumber' in data) || (data.batchNumber is string && data.batchNumber.size() <= 64))
+        && (!('orderId' in data) || (data.orderId is string && data.orderId.size() <= 64))
+        && data.balanceAfterLitres is number && data.balanceAfterLitres >= 0
+        && data.timestamp is timestamp
+        && data.performedByUid is string && data.performedByUid == request.auth.uid && isValidId(data.performedByUid)
+        && data.performedBy is string && data.performedBy.size() <= 140
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300));
+    }
+
+    function isValidStaffRequest(data, requestId) {
+      return data.keys().hasAll([
+          'requestId', 'applicantUid', 'fullName', 'email', 'staffId',
+          'assignedMachineId', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId', 'applicantUid', 'fullName', 'email', 'phone',
+          'staffId', 'assignedMachineId', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.requestId is string && data.requestId == requestId && isValidId(data.requestId)
+        && data.applicantUid is string && isValidId(data.applicantUid)
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 32))
+        && data.staffId is string && data.staffId.size() >= 2 && data.staffId.size() <= 40
+        && data.assignedMachineId is string && isValidId(data.assignedMachineId)
+        && data.status in ['PENDING', 'APPROVED', 'REJECTED']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll(['id', 'timestamp', 'event', 'actorUid', 'detailsSummary'])
+        && data.keys().hasOnly(['id', 'timestamp', 'event', 'actorUid', 'detailsSummary'])
+        && data.id is string && data.id == logId && isValidId(data.id)
+        && data.timestamp is timestamp
+        && data.event is string && data.event.size() >= 2 && data.event.size() <= 80
+        && data.actorUid is string && data.actorUid == request.auth.uid && isValidId(data.actorUid)
+        && data.detailsSummary is string && data.detailsSummary.size() <= 500;
+    }
+
+    // -----------------------------------------------------------------
+    // 1. Connection Test Document (Startup Connectivity Verification)
+    // -----------------------------------------------------------------
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 2. Admin Membership Lookup Collection (Write-protected from clients)
+    // -----------------------------------------------------------------
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 3. Users Profile Collection (PII Isolated to Owner or Admin)
+    // -----------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+
+      // Self-registration is strictly restricted to 'customer' role and verified email
+      allow create: if isValidId(userId)
+        && isEmailVerified()
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isOwner(userId) && incoming().role == 'customer' && !('approvalStatus' in incoming())) ||
+          isAdmin()
+        );
+
+      // Action-Based Update: Owner can edit safe profile fields ONLY; Admin can manage roles/status
+      allow update: if isValidId(userId)
+        && isEmailVerified()
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && (!('approvalStatus' in incoming()) && !('approvalStatus' in existing()) || incoming().approvalStatus == existing().approvalStatus)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'bottlesSaved', 'totalMilkPurchasedMl', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // -----------------------------------------------------------------
+    // 4. Orders Collection (Customer Owner or Staff/Admin)
+    // -----------------------------------------------------------------
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        existing().customerId == request.auth.uid || isStaffOrAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid || isBootstrappedAdmin()
+      );
+
+      allow create: if isValidId(orderId)
+        && isEmailVerified()
+        && isValidOrder(incoming(), orderId)
+        && incoming().customerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().paymentStatus == 'PENDING'
+        && incoming().dispensingStatus == 'WAITING_PAYMENT';
+
+      // Terminal State Locking: Completed/Failed orders cannot be altered by customers
+      allow update: if isValidId(orderId)
+        && isEmailVerified()
+        && isValidOrder(incoming(), orderId)
+        && incoming().orderId == existing().orderId
+        && incoming().customerId == existing().customerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(existing().customerId)
+            && existing().dispensingStatus != 'COMPLETED'
+            && existing().dispensingStatus != 'FAILED'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'paymentStatus', 'dispensingStatus', 'razorpayOrderId', 'razorpayPaymentId',
+              'dispensingToken', 'dispensedMl', 'failureReason', 'gatewayMode',
+              'isSimulatedPayment', 'paymentVerificationType', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 5. Machines Collection (Kiosk Telemetry, Location & Calibration)
+    // -----------------------------------------------------------------
+    match /machines/{machineId} {
+      allow get: if isValidId(machineId);
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(machineId)
+        && isAdmin()
+        && isValidMachine(incoming(), machineId)
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(machineId)
+        && isEmailVerified()
+        && isValidMachine(incoming(), machineId)
+        && incoming().machineId == existing().machineId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isApprovedStaff()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['currentStockLiters', 'temperatureCelsius', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 6. Milk Batches (FEFO Inventory)
+    // -----------------------------------------------------------------
+    match /milk_batches/{batchId} {
+      allow get: if isValidId(batchId) && isStaffOrAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(batchId)
+        && isEmailVerified()
+        && isStaffOrAdmin()
+        && isValidMilkBatch(incoming(), batchId)
+        && incoming().receivedAt == request.time
+        && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+
+      allow update: if isValidId(batchId)
+        && isEmailVerified()
+        && isValidMilkBatch(incoming(), batchId)
+        && incoming().batchId == existing().batchId
+        && incoming().receivedAt == existing().receivedAt
+        && incoming().receivedByStaffUid == existing().receivedByStaffUid
+        && (
+          isAdmin() ||
+          (
+            isApprovedStaff()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['remainingLitres', 'status', 'notes'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 7. Stock Refills (Immutable Staff Intake Ledger)
+    // -----------------------------------------------------------------
+    match /stock_refills/{refillId} {
+      allow get: if isValidId(refillId) && isStaffOrAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(refillId)
+        && isEmailVerified()
+        && isStaffOrAdmin()
+        && isValidStockRefill(incoming(), refillId)
+        && incoming().refillTimestamp == request.time
+        && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 8. Stock Transactions (Immutable Audit Ledger)
+    // -----------------------------------------------------------------
+    match /stock_transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isStaffOrAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(transactionId)
+        && isEmailVerified()
+        && isStaffOrAdmin()
+        && isValidStockTransaction(incoming(), transactionId)
+        && incoming().timestamp == request.time
+        && exists(/databases/$(database)/documents/machines/$(incoming().machineId));
+
+      allow update, delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 9. Staff Onboarding Requests
+    // -----------------------------------------------------------------
+    match /staff_requests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (
+        existing().applicantUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.applicantUid == request.auth.uid || isBootstrappedAdmin()
+      );
+
+      allow create: if isValidId(requestId)
+        && isEmailVerified()
+        && isValidStaffRequest(incoming(), requestId)
+        && incoming().applicantUid == request.auth.uid
+        && incoming().status == 'PENDING'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(requestId)
+        && isAdmin()
+        && isValidStaffRequest(incoming(), requestId)
+        && incoming().requestId == existing().requestId
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------
+    // 10. Operational Audit Logs (Append-Only)
+    // -----------------------------------------------------------------
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(logId)
+        && isEmailVerified()
+        && isStaffOrAdmin()
+        && isValidAuditLog(incoming(), logId)
+        && incoming().timestamp == request.time;
+
+      allow update, delete: if false;
+    }
+  }
+}
